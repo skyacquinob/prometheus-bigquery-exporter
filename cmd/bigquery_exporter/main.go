@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -125,6 +126,22 @@ func tryRegister(unregistered chan *sql.Collector) []*sql.Collector {
 	}
 	return registered
 }
+
+type File struct {
+	path string
+	stat os.FileInfo
+	c    *sql.Collector
+}
+
+// query operations:
+// * if (uninitialized or older than current file) {
+//     load file
+//     evaluate template
+//   }
+// * if reloaded && registered {
+//       unregister
+//   }
+// * register collector
 
 func main() {
 	flag.Parse()
