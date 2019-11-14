@@ -11,6 +11,7 @@ import (
 	"log"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/m-lab/go/prometheusx"
@@ -68,23 +69,30 @@ func fileToQuery(filename string, vars map[string]string) string {
 
 func reloadRegisterUpdate(ctx context.Context, client *bigquery.Client, files []setup.File, vars map[string]string, refresh time.Duration) {
 	for ctx.Err() == nil {
-		for _, file := range files {
-			modified, err := file.IsModified()
-			if modified && err == nil {
-				c := sql.NewCollector(
-					query.NewBQRunner(client),
-					prometheus.GaugeValue,
-					fileToMetric(file.Name),
-					fileToQuery(file.Name, vars))
+		var wg sync.WaitGroup
+		for i := range files {
+			file := &files[i]
+			wg.Add(1)
+			go func(f *setup.File) {
+				modified, err := file.IsModified()
+				if modified && err == nil {
+					c := sql.NewCollector(
+						query.NewBQRunner(client),
+						prometheus.GaugeValue,
+						fileToMetric(file.Name),
+						fileToQuery(file.Name, vars))
 
-				err = file.Register(c)
-			} else {
-				err = file.Update()
-			}
-			if err != nil {
-				log.Println(err)
-			}
+					err = file.Register(c)
+				} else {
+					err = file.Update()
+				}
+				if err != nil {
+					log.Println(err)
+				}
+				wg.Done()
+			}(file)
 		}
+		wg.Wait()
 		sleepUntilNext(refresh)
 	}
 }
