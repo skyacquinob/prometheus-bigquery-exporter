@@ -71,26 +71,25 @@ func reloadRegisterUpdate(ctx context.Context, client *bigquery.Client, files []
 	for ctx.Err() == nil {
 		var wg sync.WaitGroup
 		for i := range files {
-			file := &files[i]
 			wg.Add(1)
 			go func(f *setup.File) {
-				modified, err := file.IsModified()
+				modified, err := f.IsModified()
 				if modified && err == nil {
 					c := sql.NewCollector(
 						query.NewBQRunner(client),
 						prometheus.GaugeValue,
-						fileToMetric(file.Name),
-						fileToQuery(file.Name, vars))
+						fileToMetric(f.Name),
+						fileToQuery(f.Name, vars))
 
-					err = file.Register(c)
+					err = f.Register(c)
 				} else {
-					err = file.Update()
+					err = f.Update()
 				}
 				if err != nil {
 					log.Println(err)
 				}
 				wg.Done()
-			}(file)
+			}(&files[i])
 		}
 		wg.Wait()
 		sleepUntilNext(refresh)
