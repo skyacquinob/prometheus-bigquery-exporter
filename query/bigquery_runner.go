@@ -23,7 +23,7 @@ type BQRunner struct {
 
 // NewBQRunner creates a new QueryRunner instance.
 func NewBQRunner(client *bigquery.Client) *BQRunner {
-	return &BQRunner{client}
+	return &BQRunner{client: client}
 }
 
 // Query executes the given query. Query only supports standard SQL. The
