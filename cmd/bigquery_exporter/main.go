@@ -6,6 +6,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,13 +15,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/prometheus-bigquery-exporter/internal/setup"
 	"github.com/m-lab/prometheus-bigquery-exporter/query"
 	"github.com/m-lab/prometheus-bigquery-exporter/sql"
-
-	flag "github.com/spf13/pflag"
 
 	"cloud.google.com/go/bigquery"
 	"golang.org/x/net/context"
@@ -29,18 +29,22 @@ import (
 )
 
 var (
-	counterSources = []string{}
-	gaugeSources   = []string{}
+	counterSources = flagx.StringArray{}
+	gaugeSources   = flagx.StringArray{}
 	project        = flag.String("project", "", "GCP project name.")
-	port           = flag.String("port", ":9050", "Exporter port.")
 	refresh        = flag.Duration("refresh", 5*time.Minute, "Interval between updating metrics.")
 )
 
 func init() {
-	flag.StringArrayVar(&counterSources, "counter-query", nil, "Name of file containing a counter query.")
-	flag.StringArrayVar(&gaugeSources, "gauge-query", nil, "Name of file containing a gauge query.")
+	// TODO: support counter queries.
+	// flag.Var(&counterSources, "counter-query", "Name of file containing a counter query.")
+	flag.Var(&gaugeSources, "gauge-query", "Name of file containing a gauge query.")
 
+	// Port registered at https://github.com/prometheus/prometheus/wiki/Default-port-allocations
+	*prometheusx.ListenAddress = ":9348"
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	newRunner = defaultRunner
 }
 
 // sleepUntilNext finds the nearest future time that is a multiple of the given
@@ -67,51 +71,58 @@ func fileToQuery(filename string, vars map[string]string) string {
 	return q
 }
 
-func reloadRegisterUpdate(ctx context.Context, client *bigquery.Client, files []setup.File, vars map[string]string, refresh time.Duration) {
-	for ctx.Err() == nil {
-		var wg sync.WaitGroup
-		for i := range files {
-			wg.Add(1)
-			go func(f *setup.File) {
-				modified, err := f.IsModified()
-				if modified && err == nil {
-					c := sql.NewCollector(
-						query.NewBQRunner(client),
-						prometheus.GaugeValue,
-						fileToMetric(f.Name),
-						fileToQuery(f.Name, vars))
+func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[string]string) {
+	var wg sync.WaitGroup
+	for i := range files {
+		wg.Add(1)
+		go func(f *setup.File) {
+			modified, err := f.IsModified()
+			if modified && err == nil {
+				c := sql.NewCollector(
+					newRunner(client), prometheus.GaugeValue,
+					fileToMetric(f.Name), fileToQuery(f.Name, vars))
 
-					err = f.Register(c)
-				} else {
-					err = f.Update()
-				}
-				if err != nil {
-					log.Println(err)
-				}
-				wg.Done()
-			}(&files[i])
-		}
-		wg.Wait()
-		sleepUntilNext(refresh)
+				err = f.Register(c)
+			} else {
+				err = f.Update()
+			}
+			if err != nil {
+				log.Println(err)
+			}
+			wg.Done()
+		}(&files[i])
 	}
+	wg.Wait()
+}
+
+var mainCtx, mainCancel = context.WithCancel(context.Background())
+var newRunner func(*bigquery.Client) sql.QueryRunner
+
+func defaultRunner(client *bigquery.Client) sql.QueryRunner {
+	return query.NewBQRunner(client)
 }
 
 func main() {
 	flag.Parse()
+	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not get args from env")
+
+	srv := prometheusx.MustServeMetrics()
+	defer srv.Shutdown(mainCtx)
 
 	files := make([]setup.File, len(gaugeSources))
 	for i := range files {
 		files[i].Name = gaugeSources[i]
 	}
 
-	ctx := context.Background()
-	client, err := bigquery.NewClient(ctx, *project)
+	client, err := bigquery.NewClient(mainCtx, *project)
 	rtx.Must(err, "Failed to allocate a new bigquery.Client")
-
 	vars := map[string]string{
 		"UNIX_START_TIME":  fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		"REFRESH_RATE_SEC": fmt.Sprintf("%d", int(refresh.Seconds())),
 	}
-	prometheusx.MustStartPrometheus(*port)
-	reloadRegisterUpdate(ctx, client, files, vars, *refresh)
+
+	for mainCtx.Err() == nil {
+		reloadRegisterUpdate(client, files, vars)
+		sleepUntilNext(*refresh)
+	}
 }
