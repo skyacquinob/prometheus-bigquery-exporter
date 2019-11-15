@@ -2,6 +2,7 @@
 package sql
 
 import (
+	"log"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -67,7 +68,10 @@ func (col *Collector) Describe(ch chan<- *prometheus.Desc) {
 	if col.descs == nil {
 		// TODO: collect metrics for query exec time.
 		col.descs = make(map[string]*prometheus.Desc, 1)
-		col.Update()
+		err := col.Update()
+		if err != nil {
+			log.Println(err)
+		}
 		col.setDesc()
 	}
 	// NOTE: if Update returns no metrics, this will fail.
