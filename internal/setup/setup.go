@@ -22,10 +22,8 @@ func (f *File) IsModified() (bool, error) {
 	var err error
 	if f.stat == nil {
 		f.stat, err = os.Stat(f.Name)
-		if err != nil {
-			// TODO: what causes this?
-			return false, err
-		}
+		// Return true on the first successful Stat(), or the error otherwise.
+		return err == nil, err
 	}
 	curr, err := os.Stat(f.Name)
 	if err != nil {
@@ -42,7 +40,7 @@ func (f *File) Register(c *sql.Collector) error {
 	if f.c != nil {
 		ok := prometheus.Unregister(f.c)
 		if !ok {
-			// TODO: how to handle this?
+			// This is a fatal error. If the
 			return fmt.Errorf("Failed to unregister %q", f.Name)
 		}
 		f.c = nil
@@ -50,10 +48,10 @@ func (f *File) Register(c *sql.Collector) error {
 	// Register runs c.Update().
 	err := prometheus.Register(c)
 	if err != nil {
-		// TODO: how to handle this?
+		// While collector Update could fail transiently, this may be a fatal error.
 		return err
 	}
-	// Preserve the registration.
+	// Save the registered collector.
 	f.c = c
 	return nil
 }
