@@ -29,6 +29,7 @@ type QueryRunner interface {
 	Query(q string) ([]Metric, error)
 }
 
+// Collector manages a prometheus.Collector for queries performed by a QueryRunner.
 type Collector struct {
 	// runner must be a QueryRunner instance for collecting metrics.
 	runner QueryRunner
@@ -124,8 +125,5 @@ func (col *Collector) setDesc() {
 			// TODO: allow passing meaningful help text.
 			col.descs[k] = prometheus.NewDesc(col.metricName+k, "help text", col.metrics[0].LabelKeys, nil)
 		}
-	} else {
-		// TODO: this is a problem.
-		return
 	}
 }
