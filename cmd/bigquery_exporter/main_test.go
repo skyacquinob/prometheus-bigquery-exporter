@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"testing"
@@ -35,35 +36,35 @@ func (f *fakeRunner) Query(query string) ([]sql.Metric, error) {
 		},
 	}
 	f.updated++
+	if f.updated > 1 {
+		// Simulate an error after one successful query.
+		return nil, fmt.Errorf("Fake failure for testing")
+	}
 	return r, nil
 }
 
 func Test_main(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{
-			name: "success",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := &fakeRunner{}
-			newRunner = func(*bigquery.Client) sql.QueryRunner {
-				return f
-			}
-			*refresh = time.Second
-			gaugeSources.Set("testdata/test.query")
-			mainCtx, mainCancel = context.WithTimeout(mainCtx, time.Second)
-			defer mainCancel()
-			main()
-			if f.updated != 2 {
-				t.Errorf("main() failed to update; got %d, want 2", f.updated)
-			}
-		})
-	}
-}
+	// Provide coverage of the original newRunner definition.
+	newRunner(nil)
 
-func Test_defaultRunner(t *testing.T) {
-	defaultRunner(nil)
+	// Create a fake runner for the test.
+	f := &fakeRunner{}
+	newRunner = func(*bigquery.Client) sql.QueryRunner {
+		return f
+	}
+
+	// Set the refresh period to a very small delay.
+	*refresh = time.Second
+	gaugeSources.Set("testdata/test.query")
+
+	// Reset mainCtx to timeout after a second.
+	mainCtx, mainCancel = context.WithTimeout(mainCtx, time.Second)
+	defer mainCancel()
+
+	main()
+
+	// Verify that the fakeRunner was called twice.
+	if f.updated != 2 {
+		t.Errorf("main() failed to update; got %d, want 2", f.updated)
+	}
 }

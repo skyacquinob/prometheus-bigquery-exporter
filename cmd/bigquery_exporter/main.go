@@ -43,8 +43,6 @@ func init() {
 	// Port registered at https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 	*prometheusx.ListenAddress = ":9348"
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	newRunner = defaultRunner
 }
 
 // sleepUntilNext finds the nearest future time that is a multiple of the given
@@ -96,9 +94,7 @@ func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[
 }
 
 var mainCtx, mainCancel = context.WithCancel(context.Background())
-var newRunner func(*bigquery.Client) sql.QueryRunner
-
-func defaultRunner(client *bigquery.Client) sql.QueryRunner {
+var newRunner = func(client *bigquery.Client) sql.QueryRunner {
 	return query.NewBQRunner(client)
 }
 
