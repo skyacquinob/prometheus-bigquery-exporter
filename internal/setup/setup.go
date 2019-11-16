@@ -6,7 +6,10 @@ import (
 
 	"github.com/m-lab/prometheus-bigquery-exporter/sql"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spf13/afero"
 )
+
+var fs = afero.NewOsFs()
 
 // File represents a query file and related metadata to keep it up to date and
 // registered with the prometheus collector registry.
@@ -21,11 +24,11 @@ type File struct {
 func (f *File) IsModified() (bool, error) {
 	var err error
 	if f.stat == nil {
-		f.stat, err = os.Stat(f.Name)
+		f.stat, err = fs.Stat(f.Name)
 		// Return true on the first successful Stat(), or the error otherwise.
 		return err == nil, err
 	}
-	curr, err := os.Stat(f.Name)
+	curr, err := fs.Stat(f.Name)
 	if err != nil {
 		// TODO: best way to handle this?
 		return false, err
