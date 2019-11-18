@@ -80,8 +80,10 @@ func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[
 					newRunner(client), prometheus.GaugeValue,
 					fileToMetric(f.Name), fileToQuery(f.Name, vars))
 
+				log.Println("Registering:", fileToMetric(f.Name))
 				err = f.Register(c)
 			} else {
+				log.Println("Updating:", fileToMetric(f.Name))
 				err = f.Update()
 			}
 			if err != nil {
