@@ -18,6 +18,7 @@ type BQRunner struct {
 	runner runner
 }
 
+// runner interface allows unit testing of the Query function.
 type runner interface {
 	Query(q string, visit func(row map[string]bigquery.Value) error) error
 }
@@ -36,10 +37,13 @@ func NewBQRunner(client *bigquery.Client) *BQRunner {
 // additional columns, all of which are used as metric labels.
 func (qr *BQRunner) Query(query string) ([]sql.Metric, error) {
 	metrics := []sql.Metric{}
-	qr.runner.Query(query, func(row map[string]bigquery.Value) error {
+	err := qr.runner.Query(query, func(row map[string]bigquery.Value) error {
 		metrics = append(metrics, rowToMetric(row))
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 	return metrics, nil
 }
 
