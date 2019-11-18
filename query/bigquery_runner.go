@@ -25,7 +25,7 @@ type runner interface {
 // NewBQRunner creates a new QueryRunner instance.
 func NewBQRunner(client *bigquery.Client) *BQRunner {
 	return &BQRunner{
-		runner: &bqiface.BQRunnerImpl{
+		runner: &bqiface.BigQueryImpl{
 			Client: client,
 		},
 	}
