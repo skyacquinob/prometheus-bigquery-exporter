@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"cloud.google.com/go/bigquery"
-	"github.com/google/google-api-go-client/iterator"
+	"google.golang.org/api/iterator"
 )
 
 type BigQueryImpl struct {
