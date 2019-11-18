@@ -7,11 +7,11 @@ import (
 	"github.com/google/google-api-go-client/iterator"
 )
 
-type BQRunnerImpl struct {
+type BigQueryImpl struct {
 	Client *bigquery.Client
 }
 
-func (b *BQRunnerImpl) Query(query string, visit func(row map[string]bigquery.Value) error) error {
+func (b *BigQueryImpl) Query(query string, visit func(row map[string]bigquery.Value) error) error {
 	q := b.Client.Query(query)
 	it, err := q.Read(context.Background())
 	if err != nil {
