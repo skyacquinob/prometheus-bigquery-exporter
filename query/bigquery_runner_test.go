@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -98,10 +99,14 @@ func TestRowToMetric(t *testing.T) {
 }
 
 type fakeQuery struct {
+	err  error
 	rows []map[string]bigquery.Value
 }
 
 func (f *fakeQuery) Query(q string, visit func(row map[string]bigquery.Value) error) error {
+	if f.err != nil {
+		return f.err
+	}
 	for i := range f.rows {
 		err := visit(f.rows[i])
 		if err != nil {
@@ -114,14 +119,12 @@ func (f *fakeQuery) Query(q string, visit func(row map[string]bigquery.Value) er
 func TestBQRunner_Query(t *testing.T) {
 	tests := []struct {
 		name    string
-		query   string
 		runner  runner
 		want    []sql.Metric
 		wantErr bool
 	}{
 		{
-			name:  "okay",
-			query: "",
+			name: "okay",
 			runner: &fakeQuery{
 				rows: []map[string]bigquery.Value{
 					{
@@ -133,13 +136,20 @@ func TestBQRunner_Query(t *testing.T) {
 				sql.NewMetric(nil, nil, map[string]float64{"_name": 1.23}),
 			},
 		},
+		{
+			name: "query-error",
+			runner: &fakeQuery{
+				err: fmt.Errorf("Fake query error"),
+			},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			qr := &BQRunner{
 				runner: tt.runner,
 			}
-			got, err := qr.Query(tt.query)
+			got, err := qr.Query("select * from `fake-table`")
 			if (err != nil) != tt.wantErr {
 				t.Errorf("BQRunner.Query() error = %v, wantErr %v", err, tt.wantErr)
 				return
