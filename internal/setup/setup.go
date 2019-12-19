@@ -38,6 +38,10 @@ func (f *File) IsModified() (bool, error) {
 		return false, err
 	}
 	logx.Debug.Println("Stat: modtimes:", curr.ModTime(), f.stat.ModTime(), curr.ModTime().After(f.stat.ModTime()))
+	if curr.ModTime().After(f.stat.ModTime()) {
+		logx.Debug.Println("Stat: update:", curr)
+		f.stat = curr
+	}
 	return curr.ModTime().After(f.stat.ModTime()), nil
 }
 
