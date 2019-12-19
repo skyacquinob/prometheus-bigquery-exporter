@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 
+	"github.com/m-lab/go/logx"
+
 	"github.com/m-lab/prometheus-bigquery-exporter/sql"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/afero"
@@ -27,6 +29,7 @@ func (f *File) IsModified() (bool, error) {
 	if f.stat == nil {
 		f.stat, err = fs.Stat(f.Name)
 		// Return true on the first successful Stat(), or the error otherwise.
+		logx.Debug.Println("Stat: first:", err == nil, err)
 		return err == nil, err
 	}
 	curr, err := fs.Stat(f.Name)
@@ -34,6 +37,7 @@ func (f *File) IsModified() (bool, error) {
 		log.Printf("Failed to stat %q: %v", f.Name, err)
 		return false, err
 	}
+	logx.Debug.Println("Stat: modtimes:", curr.ModTime(), f.stat.ModTime(), curr.ModTime().After(f.stat.ModTime()))
 	return curr.ModTime().After(f.stat.ModTime()), nil
 }
 
@@ -43,6 +47,7 @@ func (f *File) IsModified() (bool, error) {
 func (f *File) Register(c *sql.Collector) error {
 	if f.c != nil {
 		ok := prometheus.Unregister(f.c)
+		logx.Debug.Println("Unregister:", f.c.String(), ok)
 		if !ok {
 			// This is a fatal error. If the
 			return fmt.Errorf("Failed to unregister %q", f.Name)
@@ -50,9 +55,11 @@ func (f *File) Register(c *sql.Collector) error {
 		f.c = nil
 	}
 	// Register runs c.Update().
+	logx.Debug.Println("Register:", c.String())
 	err := prometheus.Register(c)
 	if err != nil {
 		// While collector Update could fail transiently, this may be a fatal error.
+		logx.Debug.Println("Register error:", err)
 		return err
 	}
 	// Save the registered collector.
