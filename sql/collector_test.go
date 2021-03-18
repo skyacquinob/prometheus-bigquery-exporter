@@ -135,29 +135,20 @@ func TestNewMetric(t *testing.T) {
 	}
 }
 
-func TestFetchMinInterval(t *testing.T) {
-	q := "--first row\n--min-interval=345\nquery\n"
-	minInterval := fetchMinInterval(q)
-	if !(minInterval == 344) {
-		t.Errorf("fetchMinInterval() is %d, want %d", minInterval, 345)
+func TestFetchCronString(t *testing.T) {
+	q := "--first row\n--cron-expression=0 9 * * *\nquery\n"
+	cronString := fetchCronString(q)
+	if !(cronString == "0 9 * * *") {
+		t.Errorf("fetchCronString() is %v, want %v", cronString, "0 9 * * *")
 	}
 }
 
-func TestUpdate(t *testing.T) {
+func TestNextSchedule(t *testing.T) {
 	r := &errorQueryRunner{}
-	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "")
-	if !(c.lastRun == -1) {
-		t.Error("Collector.lastRun was inicialized as ", c.lastRun, ", want -1")
-	}
-	c.Update()
-	last := c.lastRun
-	now := time.Now().Unix()
-	if !(c.lastRun >= time.Now().Unix()-1) {
-		t.Error("Collector.lastRun should be now: ", now, ", but is: ", c.lastRun)
-	}
-	c.minInterval = 500
-	c.Update()
-	if !(c.lastRun == last) {
-		t.Error("Collector.lastRun should be ", last, ", but is ", c.lastRun)
+	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "--cron-expression=0 9 * * *")
+	now := time.Now()
+	expectedNextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, time.Local)
+	if !(c.nextRun == expectedNextRun) {
+		t.Error("Next run should be: ", expectedNextRun, ", but is: ", c.nextRun)
 	}
 }
