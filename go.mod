@@ -8,6 +8,7 @@ require (
 	github.com/golang/protobuf v1.4.1 // indirect
 	github.com/google/go-github/v25 v25.1.3 // indirect
 	github.com/googleapis/google-cloud-go-testing v0.0.0-20191008195207-8e1d251e947d
+	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/m-lab/go v1.4.0
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.6.0
