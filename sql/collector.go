@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gorhill/cronexpr"
 	"github.com/m-lab/go/logx"
-
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -41,6 +41,13 @@ type Collector struct {
 	// query contains the standardSQL query.
 	query string
 
+	// lastRun represents the last time the QueryRunner was executed
+	lastRun time.Time
+	// nextRun is the next time the QueryRunner shall run accordingly the cron parse
+	nextRun time.Time
+	// cronExpression is the schedule definition in Cron format. Ref.: https://crontab.guru/
+	cronExpression *cronexpr.Expression
+
 	// valType defines whether the metric is a Gauge or Counter type.
 	valType prometheus.ValueType
 	// descs maps metric suffixes to the prometheus description. These descriptions
@@ -53,16 +60,39 @@ type Collector struct {
 	mux sync.Mutex
 }
 
+// fetchCronString extracts the Cron Expression string set on query's file
+func fetchCronString(queryString string) string {
+	cronStringArg := "--cron-expression="
+	lines := strings.Split(queryString, "\n")
+	for i := range lines {
+		line := lines[i]
+		if strings.Contains(line, cronStringArg) {
+			return strings.Split(line, "=")[1]
+		}
+	}
+	return "* * * * *"
+}
+
+
 // NewCollector creates a new BigQuery Collector instance.
 func NewCollector(runner QueryRunner, valType prometheus.ValueType, metricName, query string) *Collector {
+	now := time.Now()
+	cronString := fetchCronString(query)
+	cronExpression, err := cronexpr.Parse(cronString)
+	if err != nil {
+		log.Println("Error trying to parsing cron string:", cronString)
+	}
 	return &Collector{
-		runner:     runner,
-		metricName: metricName,
-		query:      query,
-		valType:    valType,
-		descs:      nil,
-		metrics:    nil,
-		mux:        sync.Mutex{},
+		runner:         runner,
+		metricName:     metricName,
+		query:          query,
+		valType:        valType,
+		descs:          nil,
+		metrics:        nil,
+		mux:            sync.Mutex{},
+		cronExpression: cronExpression,
+		lastRun:        now,
+		nextRun:        cronExpression.Next(now),
 	}
 }
 
@@ -112,11 +142,25 @@ func (col *Collector) String() string {
 // Update runs the collector query and atomically updates the cached metrics.
 // Update is called automaticlly after the collector is registered.
 func (col *Collector) Update() error {
-	logx.Debug.Println("Update:", col.metricName)
-	metrics, err := col.runner.Query(col.query)
-	if err != nil {
-		logx.Debug.Println("Failed to run query:", err)
-		return err
+	now := time.Now()
+	// Verify if the minumun interval is reached
+	if now.Unix() >= col.nextRun.Unix() || col.metrics == nil {
+		logx.Debug.Println("Update:", col.metricName)
+		col.lastRun = now
+		col.nextRun = col.cronExpression.Next(now)
+		metrics, err := col.runner.Query(col.query)
+		if err != nil {
+			logx.Debug.Println("Failed to run query:", err)
+			return err
+		}
+		// Swap the cached metrics.
+		col.mux.Lock()
+		defer col.mux.Unlock()
+		// Replace slice reference with new value returned from Query. References
+		// to the previous value of col.metrics are not affected.
+		col.metrics = metrics
+	} else {
+		logx.Debug.Println("Schedule time not reached, will run at:", col.nextRun)
 	}
 	// Swap the cached metrics.
 	col.mux.Lock()

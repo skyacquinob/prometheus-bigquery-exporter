@@ -133,3 +133,21 @@ func TestNewMetric(t *testing.T) {
 		t.Errorf("NewMetric() = %v, want %v", m, want)
 	}
 }
+
+func TestFetchCronString(t *testing.T) {
+	q := "--first row\n--cron-expression=0 9 * * *\nquery\n"
+	cronString := fetchCronString(q)
+	if !(cronString == "0 9 * * *") {
+		t.Errorf("fetchCronString() is %v, want %v", cronString, "0 9 * * *")
+	}
+}
+
+func TestNextSchedule(t *testing.T) {
+	r := &errorQueryRunner{}
+	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "--cron-expression=0 9 * * *")
+	now := time.Now()
+	expectedNextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, time.Local)
+	if !(c.nextRun == expectedNextRun) {
+		t.Error("Next run should be: ", expectedNextRun, ", but is: ", c.nextRun)
+	}
+}
