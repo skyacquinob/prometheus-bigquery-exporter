@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/prometheusx/promtest"
