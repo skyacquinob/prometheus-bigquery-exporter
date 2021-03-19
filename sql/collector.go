@@ -3,6 +3,7 @@ package sql
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,14 +41,12 @@ type Collector struct {
 	metricName string
 	// query contains the standardSQL query.
 	query string
-
 	// lastRun represents the last time the QueryRunner was executed
 	lastRun time.Time
 	// nextRun is the next time the QueryRunner shall run accordingly the cron parse
 	nextRun time.Time
 	// cronExpression is the schedule definition in Cron format. Ref.: https://crontab.guru/
 	cronExpression *cronexpr.Expression
-
 	// valType defines whether the metric is a Gauge or Counter type.
 	valType prometheus.ValueType
 	// descs maps metric suffixes to the prometheus description. These descriptions
@@ -72,7 +71,6 @@ func fetchCronString(queryString string) string {
 	}
 	return "* * * * *"
 }
-
 
 // NewCollector creates a new BigQuery Collector instance.
 func NewCollector(runner QueryRunner, valType prometheus.ValueType, metricName, query string) *Collector {
@@ -162,12 +160,6 @@ func (col *Collector) Update() error {
 	} else {
 		logx.Debug.Println("Schedule time not reached, will run at:", col.nextRun)
 	}
-	// Swap the cached metrics.
-	col.mux.Lock()
-	defer col.mux.Unlock()
-	// Replace slice reference with new value returned from Query. References
-	// to the previous value of col.metrics are not affected.
-	col.metrics = metrics
 	return nil
 }
 
