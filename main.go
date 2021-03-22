@@ -24,14 +24,13 @@ import (
 
 	"cloud.google.com/go/bigquery"
 	"golang.org/x/net/context"
-
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
 	counterSources = flagx.StringArray{}
 	gaugeSources   = flagx.StringArray{}
-	project        = flag.String("project", "", "GCP project name.")
+	configSource   = flag.String("config-file", "", "Name of yaml file containing several gauge and count configs.")
+	project        = flag.String("project", "skyita-da-daita-dev", "GCP project name.")
 	refresh        = flag.Duration("refresh", 5*time.Minute, "Interval between updating metrics.")
 )
 
@@ -69,16 +68,16 @@ func fileToQuery(filename string, vars map[string]string) string {
 	return q
 }
 
-func reloadRegisterUpdate(client *bigquery.Client, GaugeFiles []setup.File, CounterFiles []setup.File, vars map[string]string) {
+func reloadRegisterUpdate(client *bigquery.Client, Files []setup.File, vars map[string]string) {
 	var wg sync.WaitGroup
-	for i := range GaugeFiles {
+	for i := range Files {
 		wg.Add(1)
 		go func(f *setup.File) {
 			modified, err := f.IsModified()
 			if modified && err == nil {
 				c := sql.NewCollector(
-					newRunner(client), prometheus.GaugeValue,
-					fileToMetric(f.Name), fileToQuery(f.Name, vars))
+					newRunner(client), f.Kind,
+					fileToMetric(f.Name), fileToQuery(f.Name, vars), f.CronString)
 
 				log.Println("Registering:", fileToMetric(f.Name))
 				// NOTE: prometheus collector registration will fail when a file
@@ -95,29 +94,7 @@ func reloadRegisterUpdate(client *bigquery.Client, GaugeFiles []setup.File, Coun
 				log.Println("Error:", f.Name, err)
 			}
 			wg.Done()
-		}(&GaugeFiles[i])
-	}
-	wg.Wait()
-	for i := range CounterFiles {
-		wg.Add(1)
-		go func(f *setup.File) {
-			modified, err := f.IsModified()
-			if modified && err == nil {
-				c := sql.NewCollector(
-					newRunner(client), prometheus.CounterValue,
-					fileToMetric(f.Name), fileToQuery(f.Name, vars))
-
-				log.Println("Registering:", fileToMetric(f.Name))
-				err = f.Register(c)
-			} else {
-				log.Println("Updating:", fileToMetric(f.Name))
-				err = f.Update()
-			}
-			if err != nil {
-				log.Println("Error:", f.Name, err)
-			}
-			wg.Done()
-		}(&CounterFiles[i])
+		}(&Files[i])
 	}
 	wg.Wait()
 }
@@ -134,15 +111,8 @@ func main() {
 	srv := prometheusx.MustServeMetrics()
 	defer srv.Shutdown(mainCtx)
 
-	GaugeFiles := make([]setup.File, len(gaugeSources))
-	for i := range GaugeFiles {
-		GaugeFiles[i].Name = gaugeSources[i]
-	}
-
-	CounterFiles := make([]setup.File, len(counterSources))
-	for i := range CounterFiles {
-		CounterFiles[i].Name = counterSources[i]
-	}
+	Files := append(setup.FilesFromSources(gaugeSources, counterSources),
+		setup.ReadConfig(*configSource)...)
 
 	client, err := bigquery.NewClient(mainCtx, *project)
 	rtx.Must(err, "Failed to allocate a new bigquery.Client")
@@ -152,7 +122,7 @@ func main() {
 	}
 
 	for mainCtx.Err() == nil {
-		reloadRegisterUpdate(client, GaugeFiles, CounterFiles, vars)
+		reloadRegisterUpdate(client, Files, vars)
 		sleepUntilNext(*refresh)
 	}
 }

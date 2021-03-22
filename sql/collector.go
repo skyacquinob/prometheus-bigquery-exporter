@@ -3,7 +3,6 @@ package sql
 
 import (
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -59,23 +58,10 @@ type Collector struct {
 	mux sync.Mutex
 }
 
-// fetchCronString extracts the Cron Expression string set on query's file
-func fetchCronString(queryString string) string {
-	cronStringArg := "--cron-expression="
-	lines := strings.Split(queryString, "\n")
-	for i := range lines {
-		line := lines[i]
-		if strings.Contains(line, cronStringArg) {
-			return strings.Split(line, "=")[1]
-		}
-	}
-	return "* * * * *"
-}
-
 // NewCollector creates a new BigQuery Collector instance.
-func NewCollector(runner QueryRunner, valType prometheus.ValueType, metricName, query string) *Collector {
+func NewCollector(runner QueryRunner, valType prometheus.ValueType, metricName,
+	query string, cronString string) *Collector {
 	now := time.Now()
-	cronString := fetchCronString(query)
 	cronExpression, err := cronexpr.Parse(cronString)
 	if err != nil {
 		log.Println("Error trying to parsing cron string:", cronString)

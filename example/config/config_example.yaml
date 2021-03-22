@@ -1,0 +1,8 @@
+queries:
+  - query:
+    file: bq_example_cron.sql
+    kind: gauge
+    cron: "* 5 * * *"
+  - query:
+    file: bq_example.sql
+    kind: counter

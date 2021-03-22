@@ -85,7 +85,7 @@ func TestFile_Update(t *testing.T) {
 		},
 		{
 			name:    "error-from-update",
-			c:       sql.NewCollector(&fakeRunner{}, prometheus.GaugeValue, "foo", ""),
+			c:       sql.NewCollector(&fakeRunner{}, prometheus.GaugeValue, "foo", "", "* * * * *"),
 			wantErr: true,
 		},
 	}
@@ -114,7 +114,7 @@ func TestFile_Register(t *testing.T) {
 	fr := &fakeRegister{
 		metric: sql.NewMetric([]string{}, []string{}, map[string]float64{"": 1.23}),
 	}
-	x := sql.NewCollector(fr, prometheus.GaugeValue, "foo", "")
+	x := sql.NewCollector(fr, prometheus.GaugeValue, "foo", "", "* * * * *")
 	tests := []struct {
 		name          string
 		fileCollector *sql.Collector
@@ -141,7 +141,7 @@ func TestFile_Register(t *testing.T) {
 		{
 			// Try to unregister a collector that was never registered.
 			name:          "unregister-returns-error",
-			fileCollector: sql.NewCollector(&fakeRunner{}, prometheus.GaugeValue, "foo", ""),
+			fileCollector: sql.NewCollector(&fakeRunner{}, prometheus.GaugeValue, "foo", "", "* * * * *"),
 			wantErr:       true,
 		},
 	}
@@ -156,4 +156,27 @@ func TestFile_Register(t *testing.T) {
 			}
 		})
 	}
+}
+
+func IsEqual(expected string, actual string, variable string, t *testing.T) {
+	if !(expected == actual) {
+		t.Errorf("%q is %q, want %q", variable, actual, expected)
+	}
+}
+
+func TestReadConfig(t *testing.T) {
+	path := "../../example/config/config_example.yaml"
+	Files := ReadConfig(path)
+
+	IsEqual(Files[0].Name, "bq_example_cron.sql", "Files[0].Name", t)
+	IsEqual(Files[1].Name, "bq_example.sql", "Files[1].Name", t)
+	IsEqual(Files[0].CronString, "* 5 * * *", "Files[0].CronString", t)
+	IsEqual(Files[1].CronString, "* * * * *", "Files[1].CronString", t)
+	if !(Files[0].Kind == prometheus.GaugeValue) {
+		t.Errorf("%q is not %q", "Files[0].Kind", "prometheus.GaugeValue")
+	}
+	if !(Files[1].Kind == prometheus.CounterValue) {
+		t.Errorf("%q is not %q", "Files[1].Kind", "prometheus.CounterValue")
+	}
+
 }
