@@ -31,7 +31,7 @@ var (
 	gaugeSources   = flagx.StringArray{}
 	configSource   = flag.String("config-file", "", "Name of yaml file containing several gauge and count configs.")
 	project        = flag.String("project", "skyita-da-daita-dev", "GCP project name.")
-	refresh        = flag.Duration("refresh", 5*time.Minute, "Interval between updating metrics.")
+	refresh        = flag.Duration("refresh", 5*time.Second, "Interval between updating metrics.")
 )
 
 func init() {

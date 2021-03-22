@@ -36,7 +36,9 @@ func (f *File) IsModified() (bool, error) {
 	var err error
 	if f.stat == nil {
 		f.stat, err = fs.Stat(f.Name)
-		logx.Debug.Println("IsModified:stat1:", f.Name, err)
+		if err != nil {
+			log.Printf("Failed to stat %q: %v", f.Name, err)
+		}
 		// Return true on the first successful Stat(), or the error otherwise.
 		return err == nil, err
 	}
@@ -99,24 +101,28 @@ type Configs struct {
 }
 
 func ReadConfig(configPath string) []File {
-	configBytes, err := ioutil.ReadFile(configPath)
-	rtx.Must(err, "Failed to open %q", configPath)
-	configs := Configs{}
-	err = yaml.Unmarshal(configBytes, &configs)
-	rtx.Must(err, "Failed to parse yaml %q", configPath)
-	Files := make([]File, len(configs.Queries))
-	for i, config := range configs.Queries {
-		log.Printf("Conifg fetched, file: %q, kind: %q, cron: %q",
-			config.File, config.Kind, config.Cron)
-		Files[i].Name = config.File
-		Files[i].Kind = KindSelector(config.Kind)
-		if config.Cron == "" {
-			Files[i].CronString = defaultCron
-		} else {
-			Files[i].CronString = config.Cron
+	if configPath != "" {
+		configBytes, err := ioutil.ReadFile(configPath)
+		rtx.Must(err, "Failed to open %q", configPath)
+		configs := Configs{}
+		err = yaml.Unmarshal(configBytes, &configs)
+		rtx.Must(err, "Failed to parse yaml %q", configPath)
+		Files := make([]File, len(configs.Queries))
+		for i, config := range configs.Queries {
+			log.Printf("Conifg fetched, file: %q, kind: %q, cron: %q",
+				config.File, config.Kind, config.Cron)
+			Files[i].Name = config.File
+			Files[i].Kind = KindSelector(config.Kind)
+			if config.Cron == "" {
+				Files[i].CronString = defaultCron
+			} else {
+				Files[i].CronString = config.Cron
+			}
 		}
+		return Files
+	} else {
+		return make([]File, 0)
 	}
-	return Files
 }
 
 func KindSelector(kind string) prometheus.ValueType {

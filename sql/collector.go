@@ -144,7 +144,7 @@ func (col *Collector) Update() error {
 		// to the previous value of col.metrics are not affected.
 		col.metrics = metrics
 	} else {
-		logx.Debug.Println("Schedule time not reached, will run at:", col.nextRun)
+		log.Println("Schedule time not reached, will run at:", col.nextRun)
 	}
 	return nil
 }
