@@ -50,7 +50,7 @@ func TestCollector(t *testing.T) {
 		`fake_metric{key="thing2"} 2.1`,
 	}
 	c := NewCollector(
-		&fakeQueryRunner{metrics}, prometheus.GaugeValue, "fake_metric", "-- not used")
+		&fakeQueryRunner{metrics}, prometheus.GaugeValue, "fake_metric", "-- not used", "* * * * *")
 
 	// NOTE: prometheus.Desc and prometheus.Metric are opaque interfaces that do
 	// not allow introspection. But, we know how many to expect, so check the
@@ -112,7 +112,7 @@ func TestCollector(t *testing.T) {
 
 func TestNewCollector(t *testing.T) {
 	r := &errorQueryRunner{}
-	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "")
+	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "", "* * * * *")
 	if c.String() != "metric_name" {
 		t.Errorf("NewCollector().String() got %q, want 'metric_name'", c.String())
 	}
@@ -135,17 +135,9 @@ func TestNewMetric(t *testing.T) {
 	}
 }
 
-func TestFetchCronString(t *testing.T) {
-	q := "--first row\n--cron-expression=0 9 * * *\nquery\n"
-	cronString := fetchCronString(q)
-	if !(cronString == "0 9 * * *") {
-		t.Errorf("fetchCronString() is %v, want %v", cronString, "0 9 * * *")
-	}
-}
-
 func TestNextSchedule(t *testing.T) {
 	r := &errorQueryRunner{}
-	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "--cron-expression=0 9 * * *")
+	c := NewCollector(r, prometheus.GaugeValue, "metric_name", "", "0 9 * * *")
 	now := time.Now()
 	expectedNextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, time.Local)
 	if !(c.nextRun == expectedNextRun) {
