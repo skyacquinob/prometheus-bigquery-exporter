@@ -18,6 +18,7 @@ import (
 	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/prometheus-bigquery-exporter/error"
 	"github.com/m-lab/prometheus-bigquery-exporter/internal/setup"
 	"github.com/m-lab/prometheus-bigquery-exporter/query"
 	"github.com/m-lab/prometheus-bigquery-exporter/sql"
@@ -69,57 +70,33 @@ func fileToQuery(filename string, vars map[string]string) string {
 	return q
 }
 
-func reloadRegisterUpdate(client *bigquery.Client, GaugeFiles []setup.File, CounterFiles []setup.File, vars map[string]string) {
+func reloadRegisterUpdate(client *bigquery.Client, files []setup.File, vars map[string]string) []error.ExportError {
 	var wg sync.WaitGroup
-	for i := range GaugeFiles {
+	errList := make([]error.ExportError, 0)
+	for i := range files {
 		wg.Add(1)
 		go func(f *setup.File) {
 			modified, err := f.IsModified()
+			errList = append(errList, error.ExportError{Err: err, File: f, Fatal: false})
 			if modified && err == nil {
 				c := sql.NewCollector(
-					newRunner(client), prometheus.GaugeValue,
-					fileToMetric(f.Name), fileToQuery(f.Name, vars))
-
-				log.Println("Registering:", fileToMetric(f.Name))
-				// NOTE: prometheus collector registration will fail when a file
-				// uses the same name but changes the metrics reported. Because
-				// this cannot be recovered, we use rtx.Must to exit and allow
-				// the runtime environment to restart.
-				rtx.Must(f.Register(c), "Failed to register collector: aborting")
-			} else {
-				start := time.Now()
-				err = f.Update()
-				log.Println("Updating:", fileToMetric(f.Name), time.Since(start))
-			}
-			if err != nil {
-				log.Println("Error:", f.Name, err)
-			}
-			wg.Done()
-		}(&GaugeFiles[i])
-	}
-	wg.Wait()
-	for i := range CounterFiles {
-		wg.Add(1)
-		go func(f *setup.File) {
-			modified, err := f.IsModified()
-			if modified && err == nil {
-				c := sql.NewCollector(
-					newRunner(client), prometheus.CounterValue,
+					newRunner(client), f.Mode,
 					fileToMetric(f.Name), fileToQuery(f.Name, vars))
 
 				log.Println("Registering:", fileToMetric(f.Name))
 				err = f.Register(c)
+				errList = append(errList, error.ExportError{Err: err, File: f, Fatal: false})
 			} else {
-				log.Println("Updating:", fileToMetric(f.Name))
+				start := time.Now()
 				err = f.Update()
-			}
-			if err != nil {
-				log.Println("Error:", f.Name, err)
+				errList = append(errList, error.ExportError{Err: err, File: f, Fatal: false})
+				log.Println("Updating:", fileToMetric(f.Name), time.Since(start))
 			}
 			wg.Done()
-		}(&CounterFiles[i])
+		}(&files[i])
 	}
 	wg.Wait()
+	return errList
 }
 
 var mainCtx, mainCancel = context.WithCancel(context.Background())
@@ -134,15 +111,19 @@ func main() {
 	srv := prometheusx.MustServeMetrics()
 	defer srv.Shutdown(mainCtx)
 
-	GaugeFiles := make([]setup.File, len(gaugeSources))
-	for i := range GaugeFiles {
-		GaugeFiles[i].Name = gaugeSources[i]
+	gaugeFiles := make([]setup.File, len(gaugeSources))
+	for i := range gaugeFiles {
+		gaugeFiles[i].Name = gaugeSources[i]
+		gaugeFiles[i].Mode = prometheus.GaugeValue
 	}
 
-	CounterFiles := make([]setup.File, len(counterSources))
-	for i := range CounterFiles {
-		CounterFiles[i].Name = counterSources[i]
+	counterFiles := make([]setup.File, len(counterSources))
+	for i := range counterFiles {
+		counterFiles[i].Name = counterSources[i]
+		counterFiles[i].Mode = prometheus.CounterValue
 	}
+
+	allFiles := append(gaugeFiles, counterFiles...)
 
 	client, err := bigquery.NewClient(mainCtx, *project)
 	rtx.Must(err, "Failed to allocate a new bigquery.Client")
@@ -150,9 +131,8 @@ func main() {
 		"UNIX_START_TIME":  fmt.Sprintf("%d", time.Now().UTC().Unix()),
 		"REFRESH_RATE_SEC": fmt.Sprintf("%d", int(refresh.Seconds())),
 	}
-
 	for mainCtx.Err() == nil {
-		reloadRegisterUpdate(client, GaugeFiles, CounterFiles, vars)
+		error.HandleErrors(reloadRegisterUpdate(client, allFiles, vars), client)
 		sleepUntilNext(*refresh)
 	}
 }

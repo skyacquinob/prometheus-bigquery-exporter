@@ -17,6 +17,7 @@ var fs = afero.NewOsFs()
 // registered with the prometheus collector registry.
 type File struct {
 	Name string
+	Mode prometheus.ValueType
 	stat os.FileInfo
 	c    *sql.Collector
 }
